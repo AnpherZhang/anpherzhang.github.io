@@ -1,6 +1,6 @@
 - 👋 Hi, I’m @AnpherZhang
 - 👀 I’m looking for friends and chatting.
-- 🌱 I’m currently living in Beijing China.
+- 🌱 I’m currently working in Beijing China.
 - 💞️ I am looking forward to receiving messages about Interesting and difficult challenges。
 - 📫 Reach me by 275000205@qq.com or wechat by AnpherZhang or Skype by live:liumian215.
 

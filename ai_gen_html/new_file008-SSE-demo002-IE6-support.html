@@ -1,0 +1,57 @@
+<html>
+<head>
+<title>IE6 SSE模拟</title>
+<style>
+#console {
+    height: 200px;
+    width: 500px;
+    border: 1px solid #000;
+    overflow: auto;
+    font-family: Courier New;
+}
+</style>
+<script type="text/javascript">
+var timerId;
+var mockData = [
+    "System initializing...",
+    "Checking hardware: OK",
+    "Loading services......[DONE]",
+    "Welcome to Legacy OS v1.0",
+    "READY >"
+];
+
+function startSSE() {
+    var consoleDiv = document.getElementById("console");
+    var counter = 0;
+    
+    timerId = setInterval(function() {
+        if(counter < mockData.length) {
+            // IE6兼容的逐字打印效果
+            var line = mockData[counter];
+            var span = document.createElement("span");
+            span.innerHTML = line + "<br>";
+            consoleDiv.appendChild(span);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            counter++;
+        } else {
+            clearInterval(timerId);
+        }
+    }, 1000);
+}
+
+function stopSSE() {
+    clearInterval(timerId);
+}
+</script>
+</head>
+<body>
+<div id="console"></div>
+<button onclick="startSSE()">开始</button>
+<button onclick="stopSSE()">停止</button>
+
+<!-- IE6兼容性补丁 -->
+<!--[if IE 6]>
+<script src="http://letsflash.cn/ax/ie6/ie6.js"></script>
+<![endif]-->
+</body>
+</html>

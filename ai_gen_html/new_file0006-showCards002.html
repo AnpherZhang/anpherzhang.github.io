@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+	<!-- 
+	AI工具：腾讯元宝
+	 命令词：
+	 生成一个html页面，实现类似 http://www.leo.cn/ 这种动态卡片网站；要求可以弹性加载新卡片信息；卡片内图片大小有时横屏有时竖屏，图片宽度自适应卡片内空间，但卡片跟随图片尺寸自动变化高度；自适应不同分辨率的浏览器，比如大屏曲面屏不限制横排的卡片数量；卡片按序号排序从左到右横排展示，每行按上一行卡片底部做顶部对齐；自适应手机和电脑网页浏览；最后代码放在同一个html文件内
+	 -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>动态卡片网站</title>
+    <style>
+        :root {
+            --card-min-width: 300px;
+            --gap: 20px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: #f5f5f7;
+            font-family: Arial, sans-serif;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(var(--card-min-width), 1fr));
+            grid-auto-flow: dense;
+            align-items: start;
+            gap: var(--gap);
+            padding: var(--gap);
+            max-width: 2560px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            overflow: hidden;
+            transition: transform 0.3s;
+            break-inside: avoid;
+        }
+
+        .image-container {
+            position: relative;
+            width: 100%;
+        }
+
+        .card-img {
+            width: 100%;
+            height: auto;
+            object-fit: contain;
+            display: block;
+        }
+
+        .card-content {
+            padding: 20px;
+        }
+
+        .card-title {
+            font-size: 1.2em;
+            margin-bottom: 8px;
+            color: #1a1a1a;
+        }
+
+        .load-more {
+            display: block;
+            margin: 30px auto;
+            padding: 12px 36px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 28px;
+            cursor: pointer;
+            font-size: 1.1em;
+            transition: background 0.3s;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+            
+            :root {
+                --card-min-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="cardContainer"></div>
+    <button class="load-more" onclick="loadMoreCards()">加载更多</button>
+
+    <script>
+        let cardIndex = 0
+        const imageRatios = [
+            {w:400,h:300},  // 横屏
+            {w:300,h:400},  // 竖屏
+            {w:500,h:350},
+            {w:350,h:500}
+        ]
+
+        // 生成自适应卡片数据
+        function generateCard() {
+            cardIndex++
+            const ratio = imageRatios[cardIndex%4]
+            return {
+                title: `卡片 ${cardIndex}`,
+                img: `https://picsum.photos/${ratio.w}/${ratio.h}?random=${cardIndex}`
+            }
+        }
+
+        // 创建卡片元素
+        function createCardElement(data) {
+            const card = document.createElement('div')
+            card.className = 'card'
+            card.innerHTML = `
+                <div class="image-container">
+                    <img src="${data.img}" 
+                         class="card-img" 
+                         alt="${data.title}"
+                         loading="lazy">
+                </div>
+                <div class="card-content">
+                    <h3 class="card-title">${data.title}</h3>
+                </div>
+            `
+            return card
+        }
+
+        // 加载更多卡片
+        function loadMoreCards(quantity = 6) {
+            const container = document.getElementById('cardContainer')
+            const fragment = document.createDocumentFragment()
+            
+            for(let i = 0; i < quantity; i++) {
+                const cardData = generateCard()
+                fragment.appendChild(createCardElement(cardData))
+            }
+            
+            container.appendChild(fragment)
+        }
+
+        // 初始化加载
+        loadMoreCards(8)
+    </script>
+</body>
+</html>

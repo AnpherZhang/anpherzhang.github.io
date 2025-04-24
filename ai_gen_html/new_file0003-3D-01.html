@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<!-- 
+	帮我写一个DOOM的网页版游戏，高保真，我可以用鼠标和键盘玩
+	-->
+    <title>WebDOOM</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #crosshair {
+            position: fixed;
+            width: 4px;
+            height: 4px;
+            background: red;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+        }
+    </style>
+</head>
+<body>
+    <div id="crosshair"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        let scene, camera, renderer, controls;
+        let moveSpeed = 0.2;
+        let objects = [];
+        let bullets = [];
+        
+        // 初始化场景
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // 灯光
+            const light = new THREE.PointLight(0xffffff, 1, 100);
+            light.position.set(0, 10, 0);
+            scene.add(light);
+            scene.add(new THREE.AmbientLight(0x404040));
+
+            // 生成地图
+            createMap();
+
+            // 玩家初始位置
+            camera.position.set(5, 1.6, 5);
+            
+            // 控制监听
+            initControls();
+        }
+
+        // 生成简单地图
+        function createMap() {
+            const map = [
+                [1,1,1,1,1],
+                [1,0,0,0,1],
+                [1,0,1,0,1],
+                [1,0,0,0,1],
+                [1,1,1,1,1]
+            ];
+
+            const texture = new THREE.TextureLoader().load('https://threejsfundamentals.org/threejs/resources/images/wall.jpg');
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(4, 4);
+
+            for(let x=0; x<5; x++) {
+                for(let z=0; z<5; z++) {
+                    if(map[x][z] === 1) {
+                        const geometry = new THREE.BoxGeometry(1, 3, 1);
+                        const material = new THREE.MeshPhongMaterial({map: texture});
+                        const wall = new THREE.Mesh(geometry, material);
+                        wall.position.set(x, 1.5, z);
+                        scene.add(wall);
+                        objects.push(wall);
+                    }
+                }
+            }
+        }
+
+        // 控制初始化
+        function initControls() {
+            const keys = {};
+            document.addEventListener('keydown', e => keys[e.key] = true);
+            document.addEventListener('keyup', e => keys[e.key] = false);
+            
+            document.addEventListener('mousemove', e => {
+                if(document.pointerLockElement === renderer.domElement) {
+                    camera.rotation.y -= e.movementX * 0.002;
+                    camera.rotation.x = THREE.MathUtils.clamp(
+                        camera.rotation.x - e.movementY * 0.002, -Math.PI/3, Math.PI/3
+                    );
+                }
+            });
+
+            document.addEventListener('click', () => {
+                if(document.pointerLockElement !== renderer.domElement) {
+                    renderer.domElement.requestPointerLock();
+                } else {
+                    shoot();
+                }
+            });
+
+            // 移动控制
+            function updateMovement() {
+                const direction = new THREE.Vector3();
+                const rotation = camera.rotation.y;
+                
+                if(keys.w) direction.z = -1;
+                if(keys.s) direction.z = 1;
+                if(keys.a) direction.x = -1;
+                if(keys.d) direction.x = 1;
+                
+                direction.normalize();
+                direction.applyAxisAngle(new THREE.Vector3(0,1,0), rotation);
+                
+                const newPos = camera.position.clone().add(direction.multiplyScalar(moveSpeed));
+                if(!checkCollision(newPos)) {
+                    camera.position.add(direction.multiplyScalar(moveSpeed));
+                }
+            }
+
+            // 碰撞检测
+            function checkCollision(pos) {
+                const playerBox = new THREE.Box3().setFromCenterAndSize(
+                    pos, new THREE.Vector3(0.5, 1.6, 0.5)
+                );
+                
+                return objects.some(obj => {
+                    const objBox = new THREE.Box3().setFromObject(obj);
+                    return playerBox.intersectsBox(objBox);
+                });
+            }
+
+            // 射击逻辑
+            function shoot() {
+                const bulletGeometry = new THREE.SphereGeometry(0.1);
+                const bulletMaterial = new THREE.MeshBasicMaterial({color: 0xff0000});
+                const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+                
+                const direction = new THREE.Vector3(0,0,-1)
+                    .applyEuler(camera.rotation);
+                
+                bullet.position.copy(camera.position);
+                bullet.velocity = direction.multiplyScalar(2);
+                scene.add(bullet);
+                bullets.push(bullet);
+            }
+
+            // 主循环
+            function animate() {
+                requestAnimationFrame(animate);
+                updateMovement();
+                
+                // 更新子弹
+                bullets.forEach((bullet, index) => {
+                    bullet.position.add(bullet.velocity);
+                    if(bullet.position.distanceTo(camera.position) > 20) {
+                        scene.remove(bullet);
+                        bullets.splice(index, 1);
+                    }
+                });
+                
+                renderer.render(scene, camera);
+            }
+            animate();
+        }
+
+        init();
+    </script>
+</body>
+</html>

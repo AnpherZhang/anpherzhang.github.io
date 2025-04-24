@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>时间轴多立方体演示</title>
+    <link rel="stylesheet" href="https://cesium.com/downloads/cesiumjs/releases/1.107/Build/Cesium/Widgets/widgets.css">
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.107/Build/Cesium/Cesium.js"></script>
+    <style>
+        html, body, #cesiumContainer {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        .control-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(40,40,40,0.9);
+            padding: 15px;
+            border-radius: 8px;
+            color: white;
+            z-index: 1000;
+        }
+        button {
+            padding: 8px 15px;
+            margin: 5px;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        #timeline {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 25px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div id="cesiumContainer"></div>
+    <div class="control-panel">
+        <button style="background:#4CAF50" onclick="startAnimation()">开始</button>
+        <button style="background:#FFC107" onclick="pauseAnimation()">暂停</button>
+        <button style="background:#2196F3" onclick="resetAnimation()">重置</button>
+    </div>
+    <div id="timeline"></div>
+
+<script>
+// 配置Cesium访问令牌
+Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI0NzUyYjUxYS1kY2M1LTQyYjYtYjE4ZC1hMzNiMjAzODQ3YjgiLCJpZCI6MTY5Mjg1LCJpYXQiOjE2OTg2NTAxNzh9.0HlwRcQr4BmH2nLrRZ8u9g5yJ3Zv7wq9X3v6XjY7XjE';
+
+// 初始化Viewer
+const viewer = new Cesium.Viewer('cesiumContainer', {
+    terrain: Cesium.Terrain.fromWorldTerrain(),
+    animation: true,
+    timeline: true,
+    shouldAnimate: false
+});
+
+// 时间范围设置（1小时）
+const startTime = Cesium.JulianDate.now();
+const stopTime = Cesium.JulianDate.addHours(startTime, 1, new Cesium.JulianDate());
+viewer.clock.startTime = startTime.clone();
+viewer.clock.stopTime = stopTime.clone();
+viewer.clock.currentTime = startTime.clone();
+viewer.clock.clockRange = Cesium.ClockRange.LOOP_STOP;
+
+// 创建三个不同颜色的立方体
+const cubes = [
+    createCube('#FF0000', 116.38, 39.91),
+    createCube('#00FF00', 116.40, 39.89),
+    createCube('#0000FF', 116.42, 39.90)
+];
+
+// 为每个立方体生成运动路径
+cubes.forEach((cube, index) => {
+    const positionProperty = createPath(index, startTime);
+    cube.position = positionProperty;
+    cube.orientation = new Cesium.VelocityOrientationProperty(positionProperty);
+});
+
+// 创建立方体实体
+function createCube(color, lon, lat) {
+    return viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(lon, lat, 50),
+        box: {
+            dimensions: new Cesium.Cartesian3(80, 80, 80),
+            material: Cesium.Color.fromCssColorString(color),
+            outline: true,
+            outlineColor: Cesium.Color.WHITE
+        },
+        path: {
+            resolution: 1,
+            material: Cesium.Color.fromCssColorString(color).withAlpha(0.5),
+            width: 3
+        }
+    });
+}
+
+// 生成不同运动路径
+function createPath(index, startTime) {
+    const positionProperty = new Cesium.SampledPositionProperty();
+    
+    // 生成路径点（每5分钟一个点）
+    for(let i=0; i<=12; i++) {
+        const time = Cesium.JulianDate.addMinutes(startTime, i*5, new Cesium.JulianDate());
+        const position = calculatePosition(index, i/12);
+        positionProperty.addSample(time, position);
+    }
+    
+    return positionProperty;
+}
+
+// 计算不同路径类型
+function calculatePosition(index, progress) {
+    const centerLon = 116.4 + (index-1)*0.02;
+    const centerLat = 39.9;
+    const radius = 0.02;
+    
+    const angle = progress * Math.PI * 2;
+    return Cesium.Cartesian3.fromDegrees(
+        centerLon + radius * Math.cos(angle * (index+1)),
+        centerLat + radius * Math.sin(angle * (index+1)),
+        50 + Math.sin(angle * 4) * 500
+    );
+}
+
+// 控制函数
+function startAnimation() {
+    viewer.clock.shouldAnimate = true;
+}
+
+function pauseAnimation() {
+    viewer.clock.shouldAnimate = false;
+}
+
+function resetAnimation() {
+    viewer.clock.currentTime = startTime.clone();
+    viewer.clock.shouldAnimate = false;
+}
+
+// 初始化视角
+viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(116.4, 39.9, 5000),
+    duration: 0
+});
+</script>
+
+<!-- 
+主要功能说明：
+时间轴控制 ：
+显示1小时时间范围的时间轴
+支持拖拽时间轴改变当前时间
+动画播放时时间轴自动前进
+循环播放模式（到达结束时间后回到起点）
+多立方体系统 ：
+红、绿、蓝三个立方体
+每个立方体有独立的螺旋运动路径
+不同运动频率（红：1倍速，绿：2倍速，蓝：3倍速）
+自动高度波动（500米幅度）
+控制功能 ：
+开始/暂停/重置按钮
+实时方向控制（立方体始终面向前进方向）
+轨迹显示（半透明路径线）
+技术特性 ：
+使用SampledPositionProperty记录路径
+VelocityOrientationProperty自动计算方向
+时间同步机制（所有立方体共享同一时钟）
+循环运动路径设计
+操作说明：
+
+基本控制 ：
+点击"开始"启动动画
+点击"暂停"停止动画
+点击"重置"回到初始状态
+拖拽时间轴查看任意时间点状态
+视角操作 ：
+鼠标左键拖动旋转视角
+右键拖动平移场景
+滚轮缩放视图
+双击立方体居中显示
+路径观察 ：
+半透明路径线显示运动轨迹
+立方体颜色与路径颜色一致
+高度变化通过垂直运动可见
+扩展能力：
+
+修改createPath函数可创建不同运动模式
+调整calculatePosition参数改变运动幅度
+增加更多立方体只需扩展cubes数组
+修改时间范围需调整startTime和stopTime
+该演示完整展示了时间控制与三维物体的协同运动，适用于数字孪生、交通模拟、设备监控等需要时间维度分析的场景。
+-->
+
+</body>
+</html>

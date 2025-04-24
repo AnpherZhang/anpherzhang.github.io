@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SSE打字效果模拟</title>
+    <style>
+        #output {
+            border: 1px solid #ccc;
+            padding: 20px;
+            margin: 20px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            min-height: 200px;
+            background: #f8f8f8;
+        }
+    </style>
+</head>
+<body>
+    <div id="output"></div>
+
+    <script>
+        // 模拟SSE数据源
+        class MockSSE {
+            constructor() {
+                this.index = 0;
+                this.fullText = "这是一个通过纯前端模拟的SSE逐字打印效果示例。\n系统时间：" + new Date().toLocaleString();
+                this.eventTarget = new EventTarget();
+            }
+
+            // 启动数据流
+            start() {
+                this.interval = setInterval(() => {
+                    if(this.index <= this.fullText.length) {
+                        const chunk = this.fullText.substr(0, this.index++);
+                        this.dispatchEvent({ data: chunk });
+                    } else {
+                        clearInterval(this.interval);
+                    }
+                }, 50); // 字符间隔时间（毫秒）
+            }
+
+            dispatchEvent(event) {
+                this.eventTarget.dispatchEvent(new MessageEvent('message', event));
+            }
+
+            close() {
+                clearInterval(this.interval);
+            }
+        }
+
+        // 初始化显示容器
+        const outputDiv = document.getElementById('output');
+        
+        // 创建模拟SSE连接
+        const mockSSE = new MockSSE();
+        
+        // 监听数据事件
+        mockSSE.eventTarget.addEventListener('message', (event) => {
+            outputDiv.textContent = event.data;
+            outputDiv.scrollTop = outputDiv.scrollHeight; // 自动滚动
+        });
+
+        // 启动模拟
+        mockSSE.start();
+
+        // 页面关闭时清理资源
+        window.addEventListener('beforeunload', () => {
+            mockSSE.close();
+        });
+    </script>
+</body>
+</html>

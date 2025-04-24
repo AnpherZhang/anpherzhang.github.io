@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<!-- 
+	帮我写一个DOOM的网页版游戏，高保真，我可以用鼠标和键盘玩
+	-->
+    <title>WebFPS</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #crosshair {
+            position: fixed;
+            width: 4px;
+            height: 4px;
+            background: red;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+        }
+    </style>
+</head>
+<body>
+    <div id="crosshair"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.3/howler.min.js"></script>
+    
+<script>
+// 初始化基础场景
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// 玩家状态
+const player = {
+    health: 100,
+    ammo: 30,
+    position: new THREE.Vector3(5, 1.6, 5),
+    rotation: new THREE.Euler(0, 0, 0, 'YXZ')
+};
+
+// 加载资源
+const textureLoader = new THREE.TextureLoader();
+const wallTexture = textureLoader.load('https://threejsfundamentals.org/threejs/resources/images/wall.jpg');
+wallTexture.wrapS = wallTexture.wrapT = THREE.RepeatWrapping;
+
+// 生成迷宫地图
+function createMaze() {
+    const mazeLayout = [
+        [1,1,1,1,1,1,1],
+        [1,0,0,0,0,0,1],
+        [1,0,1,1,1,0,1],
+        [1,0,0,0,1,0,1],
+        [1,1,1,0,1,0,1],
+        [1,0,0,0,0,0,1],
+        [1,1,1,1,1,1,1]
+    ];
+
+    mazeLayout.forEach((row, x) => {
+        row.forEach((cell, z) => {
+            if (cell === 1) {
+                const wall = new THREE.Mesh(
+                    new THREE.BoxGeometry(1, 3, 1),
+                    new THREE.MeshPhongMaterial({ map: wallTexture })
+                );
+                wall.position.set(x, 1.5, z);
+                scene.add(wall);
+            }
+        });
+    });
+}
+
+// 初始化灯光
+function initLighting() {
+    const ambientLight = new THREE.AmbientLight(0x404040);
+    const pointLight = new THREE.PointLight(0xffffff, 1, 100);
+    pointLight.position.set(10, 10, 10);
+    scene.add(ambientLight, pointLight);
+}
+
+// 武器系统
+class Weapon {
+    constructor() {
+        this.mesh = new THREE.Group();
+        this.fireRate = 500; // 毫秒
+        this.lastShot = 0;
+        
+        const geometry = new THREE.BoxGeometry(0.3, 0.1, 1);
+        const material = new THREE.MeshPhongMaterial({ color: 0x444444 });
+        const body = new THREE.Mesh(geometry, material);
+        body.position.set(0.5, -0.3, -1.5);
+        this.mesh.add(body);
+    }
+
+    shoot() {
+        if (Date.now() - this.lastShot < this.fireRate) return;
+        
+        // 创建子弹轨迹
+        const bulletDirection = new THREE.Vector3(0, 0, -1)
+            .applyEuler(camera.rotation);
+        
+        const hitTest = new THREE.Raycaster(
+            camera.position, 
+            bulletDirection,
+            0,
+            20
+        );
+        
+        const intersects = hitTest.intersectObjects(scene.children);
+        if (intersects.length > 0) {
+            // 命中处理
+            intersects[0].object.material.color.set(0xff0000);
+            setTimeout(() => {
+                intersects[0].object.material.color.set(0xffffff);
+            }, 100);
+        }
+        
+        this.lastShot = Date.now();
+    }
+}
+
+// 初始化游戏
+const weapon = new Weapon();
+camera.add(weapon.mesh);
+scene.add(camera);
+
+// 控制处理
+const keys = {};
+document.addEventListener('keydown', e => keys[e.key] = true);
+document.addEventListener('keyup', e => keys[e.key] = false);
+
+document.addEventListener('mousedown', () => {
+    if (document.pointerLockElement === renderer.domElement) {
+        weapon.shoot();
+    } else {
+        renderer.domElement.requestPointerLock();
+    }
+});
+
+document.addEventListener('mousemove', e => {
+    if (document.pointerLockElement === renderer.domElement) {
+        camera.rotation.y -= e.movementX * 0.002;
+        camera.rotation.x = THREE.MathUtils.clamp(
+            camera.rotation.x - e.movementY * 0.002, 
+            -Math.PI/3, 
+            Math.PI/3
+        );
+    }
+});
+
+// 游戏循环
+function gameLoop() {
+    // 移动处理
+    const moveSpeed = 0.2;
+    const direction = new THREE.Vector3();
+    
+    if (keys.w) direction.z -= 1;
+    if (keys.s) direction.z += 1;
+    if (keys.a) direction.x -= 1;
+    if (keys.d) direction.x += 1;
+    
+    direction.normalize();
+    direction.applyAxisAngle(new THREE.Vector3(0,1,0), camera.rotation.y);
+    
+    const newPosition = player.position.clone().add(direction.multiplyScalar(moveSpeed));
+    if (!checkCollision(newPosition)) {
+        player.position.copy(newPosition);
+        camera.position.copy(newPosition);
+    }
+    
+    requestAnimationFrame(gameLoop);
+    renderer.render(scene, camera);
+}
+
+// 碰撞检测
+function checkCollision(position) {
+    const playerBB = new THREE.Box3(
+        new THREE.Vector3(position.x - 0.3, position.y - 1.6, position.z - 0.3),
+        new THREE.Vector3(position.x + 0.3, position.y + 0.1, position.z + 0.3)
+    );
+    
+    return scene.children.some(obj => {
+        if (!obj.geometry) return false;
+        const objBB = new THREE.Box3().setFromObject(obj);
+        return playerBB.intersectsBox(objBB);
+    });
+}
+
+// 启动游戏
+initLighting();
+createMaze();
+gameLoop();
+</script>
+</body>
+</html>

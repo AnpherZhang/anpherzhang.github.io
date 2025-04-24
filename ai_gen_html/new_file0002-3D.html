@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>3D弹力球宇宙 v3.0</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #info { position: absolute; top: 10px; left: 10px; color: white; }
+    </style>
+</head>
+<body>
+    <div id="info">SCORE: 0 | 空格切换重力</div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        class PhysicsSystem3D {
+            constructor() {
+                this.gravity = new THREE.Vector3(0, -9.8, 0);
+                this.worldSize = new THREE.Vector3(20, 20, 20);
+            }
+
+            checkCollisions(objects) {
+                // 三维边界碰撞
+                objects.forEach(obj => {
+                    const pos = obj.mesh.position;
+                    const vel = obj.velocity;
+                    const radius = obj.radius;
+
+                    ['x', 'y', 'z'].forEach(axis => {
+                        if (pos[axis] < -this.worldSize[axis] + radius || 
+                            pos[axis] > this.worldSize[axis] - radius) {
+                            vel[axis] *= -0.8;
+                            pos[axis] = THREE.MathUtils.clamp(
+                                pos[axis],
+                                -this.worldSize[axis] + radius,
+                                this.worldSize[axis] - radius
+                            );
+                        }
+                    });
+                });
+
+                // 物体间碰撞
+                for (let i = 0; i < objects.length; i++) {
+                    for (let j = i + 1; j < objects.length; j++) {
+                        const a = objects[i];
+                        const b = objects[j];
+                        const distance = a.mesh.position.distanceTo(b.mesh.position);
+                        
+                        if (distance < a.radius + b.radius) {
+                            const collisionNormal = new THREE.Vector3()
+                                .subVectors(b.mesh.position, a.mesh.position)
+                                .normalize();
+                            const relativeVelocity = new THREE.Vector3()
+                                .subVectors(b.velocity, a.velocity);
+                            const speed = relativeVelocity.dot(collisionNormal);
+                            
+                            if (speed > 0) continue;
+                            
+                            const impulse = (2 * speed) / (a.mass + b.mass);
+                            a.velocity.add(collisionNormal.clone().multiplyScalar(impulse * b.mass));
+                            b.velocity.sub(collisionNormal.clone().multiplyScalar(impulse * a.mass));
+                        }
+                    }
+                }
+            }
+        }
+
+        class Game3D {
+            constructor() {
+                this.initScene();
+                this.createObjects();
+                this.setupControls();
+                this.animate();
+            }
+
+            initScene() {
+                this.scene = new THREE.Scene();
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+                this.renderer = new THREE.WebGLRenderer({ antialias: true });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                document.body.appendChild(this.renderer.domElement);
+
+                this.camera.position.set(30, 30, 30);
+                this.camera.lookAt(0,0,0);
+
+                // 添加环境光
+                const light = new THREE.AmbientLight(0x404040);
+                this.scene.add(light);
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+                directionalLight.position.set(10, 20, 15);
+                this.scene.add(directionalLight);
+            }
+
+            createObjects() {
+                this.physics = new PhysicsSystem3D();
+                this.objects = [];
+
+                // 创建动态球体
+                for (let i = 0; i < 8; i++) {
+                    const geometry = new THREE.SphereGeometry(1, 32, 32);
+                    const material = new THREE.MeshPhongMaterial({
+                        color: new THREE.Color().setHSL(Math.random(), 0.8, 0.6),
+                        shininess: 100
+                    });
+                    const mesh = new THREE.Mesh(geometry, material);
+                    
+                    mesh.position.set(
+                        THREE.MathUtils.randFloatSpread(30),
+                        THREE.MathUtils.randFloatSpread(30),
+                        THREE.MathUtils.randFloatSpread(30)
+                    );
+                    
+                    this.objects.push({
+                        mesh: mesh,
+                        velocity: new THREE.Vector3(
+                            THREE.MathUtils.randFloatSpread(20),
+                            THREE.MathUtils.randFloatSpread(20),
+                            THREE.MathUtils.randFloatSpread(20)
+                        ),
+                        radius: 1.5,
+                        mass: 1
+                    });
+                    
+                    this.scene.add(mesh);
+                }
+
+                // 创建六面体边界
+                const wireframe = new THREE.LineSegments(
+                    new THREE.EdgesGeometry(new THREE.BoxGeometry(40, 40, 40)),
+                    new THREE.LineBasicMaterial({ color: 0x00ff00 })
+                );
+                this.scene.add(wireframe);
+            }
+
+            setupControls() {
+                this.spaceKey = false;
+                document.addEventListener('keydown', e => {
+                    if (e.code === 'Space') this.spaceKey = !this.spaceKey;
+                });
+            }
+
+            animate() {
+                const clock = new THREE.Clock();
+                
+                const animateFrame = () => {
+                    requestAnimationFrame(animateFrame);
+                    const deltaTime = clock.getDelta();
+
+                    // 更新物理
+                    this.objects.forEach(obj => {
+                        if (this.spaceKey) {
+                            obj.velocity.addScaledVector(this.physics.gravity, deltaTime);
+                        }
+                        obj.velocity.multiplyScalar(0.98);
+                        obj.mesh.position.addScaledVector(obj.velocity, deltaTime);
+                    });
+
+                    this.physics.checkCollisions(this.objects);
+                    this.renderer.render(this.scene, this.camera);
+                };
+                
+                animateFrame();
+            }
+        }
+
+        // 启动游戏
+        new Game3D();
+    </script>
+</body>
+</html>

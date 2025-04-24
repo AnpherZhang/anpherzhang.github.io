@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MCP-JSON-RPC 2.0 Demo</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        .request, .response { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+        pre { background: #f5f5f5; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h2>MCP 协议模拟器</h2>
+    
+    <!-- 请求模拟 -->
+    <div class="request">
+        <button onclick="callCalculate()">调用 calculate 方法</button>
+        <button onclick="callErrorMethod()">调用错误方法</button>
+    </div>
+
+    <!-- 结果显示 -->
+    <div class="response">
+        <h3>请求/响应日志：</h3>
+        <div id="log"></div>
+    </div>
+
+<script>
+class MCPClient {
+    constructor() {
+        this.requestId = 1
+        // 模拟本地方法库
+        this.methods = {
+            calculate: (params) => {
+                try {
+                    return eval(params.expression) // 实际应用需安全校验
+                } catch(e) {
+                    throw new Error("表达式解析错误")
+                }
+            }
+        }
+    }
+
+    // 核心 RPC 调用方法
+    async call(method, params) {
+        const request = {
+            jsonrpc: "2.0",
+            method: method,
+            params: params || {},
+            id: this.requestId++
+        }
+
+        this.logMessage("请求发送", request)
+        
+        // 模拟网络延迟
+        return new Promise(resolve => {
+            setTimeout(() => {
+                try {
+                    if (!this.methods[method]) {
+                        throw { code: -32601, message: "方法不存在" }
+                    }
+                    
+                    const result = this.methods[method](params)
+                    const response = {
+                        jsonrpc: "2.0",
+                        result: result,
+                        id: request.id
+                    }
+                    this.logMessage("响应成功", response)
+                    resolve(response)
+                } catch(error) {
+                    const errorResponse = {
+                        jsonrpc: "2.0",
+                        error: {
+                            code: error.code || -32603,
+                            message: error.message || "内部错误"
+                        },
+                        id: request.id
+                    }
+                    this.logMessage("响应错误", errorResponse)
+                    resolve(errorResponse)
+                }
+            }, 500)
+        })
+    }
+
+    logMessage(type, data) {
+        const logElement = document.getElementById("log")
+        logElement.innerHTML += `
+            <div class="log-entry">
+                <strong>${type}:</strong>
+                <pre>${JSON.stringify(data, null, 2)}</pre>
+            </div>
+        `
+    }
+}
+
+// 初始化客户端
+const client = new MCPClient()
+
+// 示例调用方法
+async function callCalculate() {
+    await client.call("calculate", {
+        expression: "(3 + 5) * 2 / 4"
+    })
+}
+
+async function callErrorMethod() {
+    await client.call("undefinedMethod", {
+        testParam: "invalid"
+    })
+}
+</script>
+</body>
+</html>

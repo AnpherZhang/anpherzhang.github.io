@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>弹力小球游戏 v3.0</title>
+    <style>
+        body { overflow: hidden; margin: 0; }
+        canvas { background: #2d2d2d; display: block; }
+        #scoreboard { 
+            position: absolute; top: 10px; right: 10px;
+            color: white; font-size: 18px; font-family: Arial; 
+            text-shadow: 2px 2px 2px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="scoreboard">SCORE: 0</div>
+    <script>
+        (function() {
+            'use strict';
+            
+            // 物理参数配置
+            const PHYSICS_CONFIG = {
+                gravity: 0,
+                baseFriction: 0.98,
+                collisionDamping: 0.8,
+                boostGravity: 980,
+                edgeVelocityFactor: 0.2
+            };
+
+            // 优化后的向量类（减少对象创建）
+            class Vector {
+                constructor(x, y) {
+                    this.set(x || 0, y || 0);
+                }
+                set(x, y) { this.x = x; this.y = y; return this; }
+                copy(v) { return this.set(v.x, v.y); }
+                add(v) { return new Vector(this.x + v.x, this.y + v.y); }
+                subtract(v) { return new Vector(this.x - v.x, this.y - v.y); }
+                multiply(scalar) { return new Vector(this.x * scalar, this.y * scalar); }
+                dot(v) { return this.x * v.x + this.y * v.y; }
+                normalize() {
+                    const len = Math.sqrt(this.x*this.x + this.y*this.y);
+                    return len > 1e-5 ? new Vector(this.x/len, this.y/len) : new Vector();
+                }
+                distanceTo(v) {
+                    return Math.hypot(v.x - this.x, v.y - this.y);
+                }
+            }
+
+            class Ball {
+                constructor() {
+                    this.radius = 15;
+                    this.pos = new Vector(400 + Math.random()*200 - 100, 300 + Math.random()*200 - 100);
+                    this.vel = new Vector(Math.random()*200-100, Math.random()*200-100);
+                    this.mass = 1;
+                }
+
+                update(deltaTime) {
+                    // 移除矩形边界检测
+                    this.pos = this.pos.add(this.vel.multiply(deltaTime));
+                    this.vel = this.vel.multiply(PHYSICS_CONFIG.baseFriction);
+                }
+
+                draw(ctx) {
+                    ctx.beginPath();
+                    ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI*2);
+                    ctx.fillStyle = '#ff5555';
+                    ctx.fill();
+                }
+            }
+
+            class Hexagon {
+                constructor(radius, rotationSpeed) {
+                    this.radius = radius;
+                    this.rotation = 0;
+                    this.rotationSpeed = rotationSpeed;
+                    this.position = new Vector(400, 300);
+                    this.edges = new Array(6);
+                    this.updateVertices();
+                }
+
+                updateVertices() {
+                    const cos = Math.cos(this.rotation);
+                    const sin = Math.sin(this.rotation);
+                    
+                    for (let i = 0; i < 6; i++) {
+                        const angle = i * Math.PI/3;
+                        const x = Math.cos(angle) * this.radius;
+                        const y = Math.sin(angle) * this.radius;
+                        
+                        // 应用旋转矩阵
+                        const tx = x * cos - y * sin + this.position.x;
+                        const ty = x * sin + y * cos + this.position.y;
+                        
+                        if (!this.edges[i]) {
+                            this.edges[i] = { 
+                                start: new Vector(),
+                                end: new Vector(),
+                                normal: new Vector(),
+                                tangentVelocity: new Vector()
+                            };
+                        }
+                        
+                        const edge = this.edges[i];
+                        edge.start.set(tx, ty);
+                        
+                        // 计算下一个顶点
+                        const nextAngle = angle + Math.PI/3;
+                        const nx = Math.cos(nextAngle) * this.radius;
+                        const ny = Math.sin(nextAngle) * this.radius;
+                        edge.end.set(
+                            nx * cos - ny * sin + this.position.x,
+                            nx * sin + ny * cos + this.position.y
+                        );
+                        
+                        // 计算法向量和切线速度
+                        const edgeVector = edge.end.subtract(edge.start);
+                        edge.normal.copy(new Vector(-edgeVector.y, edgeVector.x).normalize());
+                        edge.tangentVelocity.copy(edge.normal.multiply(
+                            this.rotationSpeed * PHYSICS_CONFIG.edgeVelocityFactor * this.radius
+                        ));
+                    }
+                }
+
+                updateRotation(deltaTime) {
+                    this.rotation += this.rotationSpeed * deltaTime;
+                    this.updateVertices();
+                }
+
+                draw(ctx) {
+                    ctx.strokeStyle = '#55ff55';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    this.edges.forEach((edge, i) => {
+                        i === 0 ? ctx.moveTo(edge.start.x, edge.start.y) : ctx.lineTo(edge.start.x, edge.start.y);
+                    });
+                    ctx.closePath();
+                    ctx.stroke();
+                }
+            }
+
+            class PhysicsSystem {
+                checkAllCollisions(balls, hexagons) {
+                    balls.forEach(ball => {
+                        hexagons.forEach(hexagon => {
+                            hexagon.edges.forEach(edge => {
+                                const closest = this.getClosestPoint(edge, ball.pos);
+                                const distance = ball.pos.distanceTo(closest);
+                                if (distance < ball.radius) {
+                                    this.resolveCollision(ball, edge, distance);
+                                }
+                            });
+                        });
+                    });
+
+                    // 优化球体碰撞检测（空间分割）
+                    const grid = new Map();
+                    balls.forEach((ball, i) => {
+                        const x = Math.floor(ball.pos.x / 100);
+                        const y = Math.floor(ball.pos.y / 100);
+                        const key = `${x},${y}`;
+                        if (!grid.has(key)) grid.set(key, []);
+                        grid.get(key).push(ball);
+                    });
+
+                    grid.forEach(cell => {
+                        for (let i = 0; i < cell.length; i++) {
+                            for (let j = i+1; j < cell.length; j++) {
+                                const b1 = cell[i];
+                                const b2 = cell[j];
+                                const dist = b1.pos.distanceTo(b2.pos);
+                                if (dist < b1.radius + b2.radius) {
+                                    this.resolveBallCollision(b1, b2, dist);
+                                }
+                            }
+                        }
+                    });
+                }
+
+                getClosestPoint(edge, point) {
+                    const aToB = edge.end.subtract(edge.start);
+                    const aToP = point.subtract(edge.start);
+                    const t = Math.max(0, Math.min(1, aToP.dot(aToB) / aToB.dot(aToB)));
+                    return edge.start.add(aToB.multiply(t));
+                }
+
+                resolveCollision(ball, edge, penetration) {
+                    const normal = edge.normal;
+                    const relativeVelocity = ball.vel.subtract(edge.tangentVelocity);
+                    const velocityNormal = relativeVelocity.dot(normal);
+                    
+                    if (velocityNormal < 0) return;
+                    
+                    // 加入旋转边缘的速度影响
+                    const impulse = normal.multiply(
+                        (1 + PHYSICS_CONFIG.collisionDamping) * velocityNormal
+                    );
+                    ball.vel = ball.vel.subtract(impulse);
+                    
+                    // 位置修正
+                    const correction = normal.multiply(ball.radius - penetration);
+                    ball.pos = ball.pos.add(correction.multiply(0.8));
+                }
+
+                resolveBallCollision(b1, b2, distance) {
+                    const collisionNormal = b2.pos.subtract(b1.pos).normalize();
+                    const relativeVelocity = b2.vel.subtract(b1.vel);
+                    const speed = relativeVelocity.dot(collisionNormal);
+                    if (speed > 0) return;
+
+                    const impulse = (2 * speed) / (b1.mass + b2.mass);
+                    b1.vel = b1.vel.add(collisionNormal.multiply(impulse * b2.mass));
+                    b2.vel = b2.vel.subtract(collisionNormal.multiply(impulse * b1.mass));
+                    
+                    // 位置分离
+                    const overlap = (b1.radius + b2.radius - distance) * 0.5;
+                    b1.pos = b1.pos.subtract(collisionNormal.multiply(overlap));
+                    b2.pos = b2.pos.add(collisionNormal.multiply(overlap));
+                }
+            }
+
+            // 初始化系统
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const physics = new PhysicsSystem();
+            const hexagon = new Hexagon(150, Math.PI/3);
+            const balls = Array(5).fill().map(() => new Ball());
+            let lastTime = 0;
+
+            function animate(time) {
+                const deltaTime = Math.min(0.1, (time - (lastTime || time)) / 1000);
+                lastTime = time;
+
+                // 应用重力
+                balls.forEach(ball => {
+                    ball.vel.y += PHYSICS_CONFIG.gravity * deltaTime;
+                });
+
+                hexagon.updateRotation(deltaTime);
+                balls.forEach(ball => ball.update(deltaTime));
+                physics.checkAllCollisions(balls, [hexagon]);
+
+                // 渲染
+                ctx.clearRect(0, 0, 800, 600);
+                hexagon.draw(ctx);
+                balls.forEach(ball => ball.draw(ctx));
+                requestAnimationFrame(animate);
+            }
+
+            // 控制事件
+            document.addEventListener('keydown', e => {
+                if (e.key === 'Shift') {
+                    PHYSICS_CONFIG.gravity = PHYSICS_CONFIG.boostGravity;
+                } else if (e.key === 'Control') {
+                    PHYSICS_CONFIG.gravity = -PHYSICS_CONFIG.boostGravity;
+                }
+            });
+
+            document.addEventListener('keyup', () => {
+                PHYSICS_CONFIG.gravity = 0;
+            });
+
+            animate(0);
+        })();
+    </script>
+</body>
+</html>

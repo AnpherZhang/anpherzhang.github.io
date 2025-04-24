@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<!-- 
+	优化代码--
+	html网页 题目：实现一个弹力小球游戏：环境设置：创建一个旋转的六边形作为小球的活动区域。物理规律：小球需要受到重力和摩擦力的影响。碰撞检测：小球与六边形墙壁碰撞时，需要按照物理规律反弹。 最终结果生成到一个文件内进行测试
+	-->
+    <title>弹力小球六边形游戏</title>
+    <style>
+        canvas {
+            border: 1px solid #000;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="600" height="600"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // 游戏参数
+        const config = {
+            gravity: 0.2,        // 重力加速度
+            friction: 0.99,      // 摩擦力系数
+            bounce: 0.8,         // 反弹系数
+            rotationSpeed: 0.01  // 六边形旋转速度
+        };
+
+        // 六边形参数
+        const hexagon = {
+            radius: 250,         // 六边形半径（中心到顶点的距离）
+            rotation: 0,         // 当前旋转角度
+            sides: []            // 存储各边坐标（动态更新）
+        };
+
+        // 小球参数
+        const ball = {
+            x: 300,              // 初始位置X
+            y: 300,              // 初始位置Y
+            radius: 10,          // 半径
+            dx: 2,               // X轴速度
+            dy: 0                // Y轴速度
+        };
+
+        // 初始化六边形各边
+        function initHexagon() {
+            const points = [];
+            for (let i = 0; i < 6; i++) {
+                const angle = (i * Math.PI / 3) + hexagon.rotation;
+                const x = canvas.width/2 + hexagon.radius * Math.cos(angle);
+                const y = canvas.height/2 + hexagon.radius * Math.sin(angle);
+                points.push({x, y});
+            }
+            
+            hexagon.sides = [];
+            for (let i = 0; i < 6; i++) {
+                hexagon.sides.push({
+                    p1: points[i],
+                    p2: points[(i+1)%6]
+                });
+            }
+        }
+
+        // 检测碰撞并响应
+        function checkCollisions() {
+            hexagon.sides.forEach(side => {
+                // 将线段转换为向量形式
+                const v1 = { x: side.p2.x - side.p1.x, y: side.p2.y - side.p1.y };
+                const v2 = { x: ball.x - side.p1.x, y: ball.y - side.p1.y };
+                
+                // 计算投影长度
+                const dot = (v2.x * v1.x + v2.y * v1.y) / (v1.x**2 + v1.y**2);
+                
+                // 找到线段上最近的点
+                let closest = {
+                    x: side.p1.x + v1.x * Math.max(0, Math.min(1, dot)),
+                    y: side.p1.y + v1.y * Math.max(0, Math.min(1, dot))
+                };
+                
+                // 计算距离
+                const dx = closest.x - ball.x;
+                const dy = closest.y - ball.y;
+                const distance = Math.sqrt(dx**2 + dy**2);
+                
+                if (distance < ball.radius) {
+                    // 碰撞响应
+                    const normal = { x: dx/distance, y: dy/distance };
+                    const speed = ball.dx * normal.x + ball.dy * normal.y;
+                    
+                    ball.dx -= 2 * speed * normal.x * config.bounce;
+                    ball.dy -= 2 * speed * normal.y * config.bounce;
+                    
+                    // 位置修正
+                    const overlap = ball.radius - distance;
+                    ball.x -= overlap * normal.x;
+                    ball.y -= overlap * normal.y;
+                }
+            });
+        }
+
+        // 更新游戏状态
+        function update() {
+            // 应用物理效果
+            ball.dy += config.gravity;
+            ball.dx *= config.friction;
+            ball.dy *= config.friction;
+            
+            // 更新位置
+            ball.x += ball.dx;
+            ball.y += ball.dy;
+            
+            // 更新六边形旋转
+            hexagon.rotation += config.rotationSpeed;
+            initHexagon();
+            
+            // 碰撞检测
+            checkCollisions();
+        }
+
+        // 绘制游戏元素
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 绘制六边形
+            ctx.beginPath();
+            hexagon.sides.forEach((side, i) => {
+                if (i === 0) ctx.moveTo(side.p1.x, side.p1.y);
+                ctx.lineTo(side.p2.x, side.p2.y);
+            });
+            ctx.closePath();
+            ctx.strokeStyle = '#000';
+            ctx.stroke();
+            
+            // 绘制小球
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
+            ctx.fillStyle = '#f00';
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        // 游戏循环
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // 初始化并启动游戏
+        initHexagon();
+        gameLoop();
+    </script>
+</body>
+</html>

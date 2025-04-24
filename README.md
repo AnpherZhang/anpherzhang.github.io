@@ -40,4 +40,3 @@ https://anpherzhang.github.io/ai_gen_html/new_file009-MCP-demo001.html
 https://anpherzhang.github.io/ai_gen_html/OrbitControls.js.bak.js 
 https://anpherzhang.github.io/ai_gen_html/OrbitControls.js.default.js 
 https://anpherzhang.github.io/ai_gen_html/OrbitControls.js.min.js
-
